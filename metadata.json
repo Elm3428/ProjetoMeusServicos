@@ -1,0 +1,5 @@
+{
+  "name": "Gestor de Serviços Claudemir",
+  "description": "Uma plataforma completa para gestão de registros de serviços e pagamentos, com dashboards interativos, filtros avançados e insights baseados em IA (Gemini).",
+  "requestFramePermissions": []
+}
