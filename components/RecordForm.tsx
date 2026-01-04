@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServiceRecord, RecordType } from '../types';
 import { getWeekDay } from '../utils/dataUtils';
-import { X } from 'lucide-react';
+import { X, Edit3, PlusCircle } from 'lucide-react';
 
 interface RecordFormProps {
   initialData?: ServiceRecord;
@@ -66,7 +66,7 @@ const RecordForm: React.FC<RecordFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.description.trim() || !formData.client.trim() || formData.value <= 0) {
-      alert("Por favor, preencha a descrição, o cliente e um valor positivo.");
+      alert("Por favor, preencha todos os campos obrigatórios e um valor positivo.");
       return;
     }
     
@@ -80,45 +80,47 @@ const RecordForm: React.FC<RecordFormProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 transition-opacity">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
       <div 
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100"
-        style={{ animation: 'modalEntry 0.2s ease-out forwards' }}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden transform animate-in zoom-in duration-200"
       >
-        <style>{`
-          @keyframes modalEntry {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-          }
-        `}</style>
-        
-        <div className="bg-slate-50 px-6 py-4 flex items-center justify-between border-b border-slate-100">
-          <h2 className="text-xl font-bold text-slate-800">
-            {initialData ? 'Editar Registro' : 'Novo Registro'}
-          </h2>
+        <div className={`px-6 py-5 flex items-center justify-between border-b border-slate-100 ${initialData ? 'bg-blue-50/50' : 'bg-slate-50'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${initialData ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white'}`}>
+              {initialData ? <Edit3 size={20} /> : <PlusCircle size={20} />}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                {initialData ? 'Alterar Registro' : 'Novo Registro'}
+              </h2>
+              {initialData && (
+                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Editando entrada existente</p>
+              )}
+            </div>
+          </div>
           <button 
             type="button" 
             onClick={onCancel} 
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition-colors"
+            className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Tipo de Registro</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Categoria</label>
               <div className="flex gap-2">
                 {[RecordType.SERVICOS, RecordType.PAGAMENTOS].map(t => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setFormData(p => ({ ...p, type: t }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                    className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${
                       formData.type === t 
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-md' 
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xl' 
+                        : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
                     }`}
                   >
                     {t}
@@ -128,19 +130,19 @@ const RecordForm: React.FC<RecordFormProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Data</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Data do Evento</label>
               <input
                 type="date"
                 name="date"
                 value={formData.date}
                 onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-semibold"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Valor (R$)</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Valor Total (R$)</label>
               <input
                 type="number"
                 step="0.01"
@@ -148,43 +150,40 @@ const RecordForm: React.FC<RecordFormProps> = ({
                 value={formData.value || ''}
                 onChange={handleChange}
                 placeholder="0,00"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-bold"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-black text-slate-900"
                 required
               />
             </div>
 
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Cliente</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Cliente / Parceiro</label>
               <input
                 type="text"
                 name="client"
                 list="clients-list"
                 value={formData.client}
                 onChange={handleChange}
-                placeholder="Selecione ou digite um cliente..."
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
+                placeholder="Nome do cliente..."
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-semibold"
                 required
               />
-              <datalist id="clients-list">
-                {clients.map(c => <option key={c} value={c} />)}
-              </datalist>
             </div>
 
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Descrição</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Descrição dos Serviços</label>
               <textarea
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
-                rows={2}
-                placeholder="O que foi feito?"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all resize-none"
+                rows={3}
+                placeholder="O que foi realizado?"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all resize-none font-medium text-sm"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Cidade</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Local / Cidade</label>
               <input
                 type="text"
                 name="city"
@@ -192,27 +191,21 @@ const RecordForm: React.FC<RecordFormProps> = ({
                 value={formData.city}
                 onChange={handleChange}
                 placeholder="Ex: Maringá"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-semibold text-sm"
               />
-              <datalist id="cities-list">
-                {cities.map(c => <option key={c} value={c} />)}
-              </datalist>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Executado por</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Responsável</label>
               <input
                 type="text"
                 name="executedBy"
                 list="executors-list"
                 value={formData.executedBy}
                 onChange={handleChange}
-                placeholder="Ex: Evandro"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
+                placeholder="Quem executou?"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 focus:ring-2 focus:ring-slate-900 outline-none transition-all font-semibold text-sm"
               />
-              <datalist id="executors-list">
-                {executors.map(e => <option key={e} value={e} />)}
-              </datalist>
             </div>
           </div>
 
@@ -220,15 +213,17 @@ const RecordForm: React.FC<RecordFormProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 py-2.5 rounded-lg text-slate-600 font-semibold border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="flex-1 py-4 rounded-2xl text-slate-400 font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-50 transition-colors text-xs"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+              className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl text-xs text-white ${
+                initialData ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-100' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-100'
+              }`}
             >
-              Salvar
+              Confirmar e Salvar
             </button>
           </div>
         </form>

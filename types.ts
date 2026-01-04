@@ -17,6 +17,13 @@ export interface ServiceRecord {
   city: string;
 }
 
+export interface DatabaseConfig {
+  projectId: string;
+  apiKey: string;
+  tableName: string;
+  isInitialized: boolean;
+}
+
 export interface AppState {
   records: ServiceRecord[];
   isAuthenticated: boolean;

@@ -9,29 +9,30 @@ import { INITIAL_RECORDS } from './constants';
 import Dashboard from './components/Dashboard';
 import RecordsTable from './components/RecordsTable';
 import RecordForm from './components/RecordForm';
-import Filters from './components/Filters';
-import AIInsights from './components/AIInsights';
+import { neonDB } from './services/neonService';
 import { 
   Plus, 
   LogOut, 
   LayoutDashboard, 
   List, 
-  Search, 
   Download, 
-  Upload,
   Menu,
-  Database
+  Database,
+  Loader2,
+  CheckCircle2,
+  Search
 } from 'lucide-react';
+import { parseISO } from 'date-fns';
 
 const App: React.FC = () => {
-  // State
   const [records, setRecords] = useState<ServiceRecord[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginData, setLoginData] = useState({ user: '', pass: '' });
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records'>('dashboard');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ServiceRecord | undefined>();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
   const [filters, setFilters] = useState<FilterState>({
     search: '',
@@ -42,40 +43,53 @@ const App: React.FC = () => {
     endDate: ''
   });
 
-  // Load Data
   useEffect(() => {
-    const saved = localStorage.getItem('claudemir_records');
-    if (saved) {
+    const initApp = async () => {
       try {
-        setRecords(JSON.parse(saved));
+        const auth = localStorage.getItem('claudemir_auth');
+        if (auth === 'true') setIsAuthenticated(true);
+        const remoteRecords = await neonDB.fetchRecords();
+        if (remoteRecords.length > 0) {
+          setRecords(remoteRecords);
+        } else {
+          setRecords(INITIAL_RECORDS);
+          await neonDB.syncAll(INITIAL_RECORDS);
+        }
       } catch (e) {
-        setRecords(INITIAL_RECORDS);
+        const saved = localStorage.getItem('claudemir_records');
+        setRecords(saved ? JSON.parse(saved) : INITIAL_RECORDS);
+      } finally {
+        setIsLoadingInitial(false);
       }
-    } else {
-      setRecords(INITIAL_RECORDS);
-      localStorage.setItem('claudemir_records', JSON.stringify(INITIAL_RECORDS));
-    }
-    
-    const auth = localStorage.getItem('claudemir_auth');
-    if (auth === 'true') setIsAuthenticated(true);
+    };
+    initApp();
   }, []);
 
-  // Sync Data
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
   useEffect(() => {
     if (records.length >= 0) {
       localStorage.setItem('claudemir_records', JSON.stringify(records));
     }
   }, [records]);
 
-  // Handlers
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginData.user === 'admin' && loginData.pass === 'admin') {
       setIsAuthenticated(true);
       localStorage.setItem('claudemir_auth', 'true');
     } else {
-      alert('Usuário ou senha incorretos. Dica: use admin/admin');
+      alert('Usuário ou senha incorretos.');
     }
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
   };
 
   const handleLogout = () => {
@@ -83,252 +97,184 @@ const App: React.FC = () => {
     localStorage.removeItem('claudemir_auth');
   };
 
-  const saveRecord = (record: ServiceRecord) => {
-    if (editingRecord) {
+  const saveRecord = async (record: ServiceRecord) => {
+    const isEditing = !!editingRecord;
+    if (isEditing) {
       setRecords(prev => prev.map(r => r.id === record.id ? record : r));
+      showToast("Atualizado!");
     } else {
       setRecords(prev => [record, ...prev]);
+      showToast("Criado!");
     }
+    await neonDB.saveRecord(record);
     setIsFormOpen(false);
     setEditingRecord(undefined);
   };
 
-  const deleteRecord = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este registro?')) {
+  const deleteRecord = async (id: string) => {
+    if (confirm('Excluir este registro?')) {
       setRecords(prev => prev.filter(r => r.id !== id));
+      await neonDB.deleteRecord(id);
+      showToast("Removido!");
     }
   };
 
   const handleExport = () => {
     const dataStr = JSON.stringify(records, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `gestor_claudemir_${new Date().toISOString().split('T')[0]}.json`;
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.setAttribute('download', `gestor_${new Date().toISOString().split('T')[0]}.json`);
     linkElement.click();
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const imported = JSON.parse(event.target?.result as string);
-          if (Array.isArray(imported)) {
-            setRecords(prev => [...imported, ...prev]);
-            alert('Importação concluída com sucesso!');
-          }
-        } catch (e) {
-          alert('Erro ao processar arquivo JSON.');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  // Filtered Data
+  // Improved filtering + SORTING by date DESCENDING (most recent first)
   const filteredRecords = useMemo(() => {
-    return records.filter(r => {
-      const matchesSearch = r.description.toLowerCase().includes(filters.search.toLowerCase()) ||
-                            r.client.toLowerCase().includes(filters.search.toLowerCase());
-      const matchesType = filters.type === 'Todos' || r.type === filters.type;
-      const matchesClient = filters.client === 'Todos' || r.client === filters.client;
-      const matchesCity = filters.city === 'Todos' || r.city === filters.city;
-      
-      let matchesDate = true;
-      if (filters.startDate) matchesDate = matchesDate && r.date >= new Date(filters.startDate).toISOString();
-      if (filters.endDate) matchesDate = matchesDate && r.date <= new Date(filters.endDate).toISOString();
-      
-      return matchesSearch && matchesType && matchesClient && matchesCity && matchesDate;
-    });
+    return records
+      .filter(r => {
+        const matchesSearch = r.description.toLowerCase().includes(filters.search.toLowerCase()) ||
+                              r.client.toLowerCase().includes(filters.search.toLowerCase());
+        const matchesType = filters.type === 'Todos' || r.type === filters.type;
+        return matchesSearch && matchesType;
+      })
+      .sort((a, b) => {
+        const dateA = parseISO(a.date).getTime();
+        const dateB = parseISO(b.date).getTime();
+        return dateB - dateA; // Descending order
+      });
   }, [records, filters]);
 
   const uniqueClients = useMemo(() => Array.from(new Set(records.map(r => r.client))).filter(Boolean).sort(), [records]);
   const uniqueCities = useMemo(() => Array.from(new Set(records.map(r => r.city))).filter(Boolean).sort(), [records]);
   const uniqueExecutors = useMemo(() => Array.from(new Set(records.map(r => r.executedBy))).filter(Boolean).sort(), [records]);
 
-  // Auth Screen
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
-          <div className="text-center mb-8">
-            <div className="bg-slate-900 w-16 h-16 rounded-2xl flex items-center justify-center text-white mx-auto mb-4">
-              <Database size={32} />
+        <div className="w-full max-w-sm bg-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-800">
+          <div className="text-center mb-6">
+            <div className="bg-emerald-500 w-10 h-10 rounded-xl flex items-center justify-center text-white mx-auto mb-3">
+              <Database size={20} />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Gestor de Serviços</h1>
-            <p className="text-slate-500">Faça login para acessar os dados</p>
+            <h1 className="text-lg font-bold text-white">Gestor de Serviços</h1>
           </div>
-          
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Usuário</label>
-              <input
-                type="text"
-                value={loginData.user}
-                onChange={e => setLoginData(p => ({ ...p, user: e.target.value }))}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
-                placeholder="Ex: admin"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Senha</label>
-              <input
-                type="password"
-                value={loginData.pass}
-                onChange={e => setLoginData(p => ({ ...p, pass: e.target.value }))}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none transition-all"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-            >
-              Entrar
-            </button>
-            <p className="text-center text-xs text-slate-400 mt-4">Credenciais padrão: admin / admin</p>
+            <input
+              type="text"
+              value={loginData.user}
+              onChange={e => setLoginData(p => ({ ...p, user: e.target.value }))}
+              className="w-full px-4 py-2 bg-slate-800 border border-slate-700 text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Usuário"
+              required
+            />
+            <input
+              type="password"
+              value={loginData.pass}
+              onChange={e => setLoginData(p => ({ ...p, pass: e.target.value }))}
+              className="w-full px-4 py-2 bg-slate-800 border border-slate-700 text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Senha"
+              required
+            />
+            <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-xl text-sm font-bold hover:bg-emerald-500 transition-all">Entrar</button>
           </form>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Sidebar - Desktop */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transition-transform lg:relative lg:translate-x-0
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="h-full flex flex-col p-6">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="bg-white/10 p-2 rounded-lg">
-              <Database size={20} />
-            </div>
-            <h2 className="font-bold text-lg tracking-tight">Gestor Pro</h2>
-          </div>
+  if (isLoadingInitial) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" size={24} />
+      </div>
+    );
+  }
 
-          <nav className="flex-1 space-y-2">
-            <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
+  return (
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-950 text-slate-200 relative">
+      {notification && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-2">
+          <div className={`px-4 py-2 rounded-lg shadow-xl flex items-center gap-2 border ${
+            notification.type === 'success' ? 'bg-emerald-600 border-emerald-500' : 'bg-rose-600 border-rose-500'
+          } text-white`}>
+            <CheckCircle2 size={14} />
+            <span className="font-bold text-[11px] uppercase tracking-wider">{notification.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar - Smaller and stealthy */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-16 bg-slate-900 border-r border-slate-800 transition-transform lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="h-full flex flex-col items-center py-6 gap-8">
+          <div className="bg-emerald-500 p-2 rounded-lg text-white">
+            <Database size={16} />
+          </div>
+          <nav className="flex-1 flex flex-col gap-4">
+            <button className="p-3 rounded-xl bg-slate-800 text-emerald-500 shadow-lg" title="Dashboard">
               <LayoutDashboard size={18} />
-              Dashboard
             </button>
-            <button 
-              onClick={() => setActiveTab('records')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                activeTab === 'records' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <List size={18} />
-              Registros
+            <button className="p-3 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition-all" title="Exportar" onClick={handleExport}>
+              <Download size={18} />
             </button>
           </nav>
-
-          <div className="mt-10 p-4 rounded-2xl bg-white/5 border border-white/10">
-            <Filters 
-              filters={filters} 
-              setFilters={setFilters} 
-              clients={uniqueClients} 
-              cities={uniqueCities} 
-              onClose={() => setIsSidebarOpen(false)}
-            />
-          </div>
-
-          <div className="mt-auto pt-6 border-t border-white/10 space-y-2">
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 transition-all"
-            >
-              <LogOut size={18} />
-              Sair da conta
-            </button>
-          </div>
+          <button onClick={handleLogout} className="p-3 rounded-xl text-slate-600 hover:text-rose-400" title="Sair">
+            <LogOut size={18} />
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-            >
-              <Menu size={24} />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">
-                {activeTab === 'dashboard' ? 'Dashboard Financeiro' : 'Controle de Serviços'}
-              </h1>
-              <p className="text-xs text-slate-500 hidden sm:block">Bem-vindo de volta, Claudemir</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 mr-2">
-              <label className="cursor-pointer bg-white border border-slate-200 px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 text-sm font-medium">
-                <Upload size={16} />
-                Importar
-                <input type="file" className="hidden" accept=".json" onChange={handleImport} />
-              </label>
-              <button 
-                onClick={handleExport}
-                className="bg-white border border-slate-200 px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 text-sm font-medium"
-              >
-                <Download size={16} />
-                Exportar
-              </button>
-            </div>
-            <button 
-              onClick={() => {
-                setEditingRecord(undefined);
-                setIsFormOpen(true);
-              }}
-              className="bg-slate-900 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 font-bold"
-            >
-              <Plus size={20} />
-              <span className="hidden sm:inline">Novo Registro</span>
-            </button>
-          </div>
-        </header>
-
-        <div className="p-6 space-y-8">
-          {/* AI Insights Bar */}
-          <AIInsights records={filteredRecords} />
-
-          {activeTab === 'dashboard' ? (
-            <Dashboard records={filteredRecords} />
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                <div className="flex items-center gap-4 text-sm text-slate-500">
-                  <p>Exibindo <span className="font-bold text-slate-900">{filteredRecords.length}</span> resultados</p>
-                </div>
-              </div>
-              <RecordsTable 
-                records={filteredRecords} 
-                onEdit={(rec) => {
-                  setEditingRecord(rec);
-                  setIsFormOpen(true);
-                }}
-                onDelete={deleteRecord}
+            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-1.5 text-slate-400"><Menu size={18} /></button>
+            <div className="relative group">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-emerald-500 transition-colors" />
+              <input 
+                type="text"
+                placeholder="BUSCAR REGISTRO..."
+                value={filters.search}
+                onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+                className="bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-[10px] font-bold tracking-widest text-white outline-none focus:ring-1 focus:ring-emerald-500 w-48 lg:w-64 transition-all"
               />
             </div>
-          )}
+          </div>
+          <button onClick={() => { setEditingRecord(undefined); setIsFormOpen(true); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg flex items-center gap-2 hover:bg-emerald-500 shadow-lg shadow-emerald-950/20 text-[10px] font-black uppercase tracking-[0.1em]">
+            <Plus size={14} /> Novo Serviço
+          </button>
+        </header>
+
+        <div className="p-6 space-y-8 max-w-7xl mx-auto">
+          {/* Dashboard is ALWAYS visible at the top */}
+          <section id="dashboard-section">
+            <Dashboard records={records} />
+          </section>
+
+          {/* Records Table follows below */}
+          <section id="records-section" className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Listagem de Atividades (Mais Recentes Primeiro)</h2>
+              <div className="flex gap-2">
+                 <select 
+                    value={filters.type} 
+                    onChange={(e) => setFilters(f => ({ ...f, type: e.target.value as any }))}
+                    className="bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[9px] font-bold uppercase text-slate-400 outline-none"
+                 >
+                    <option value="Todos">Todos Tipos</option>
+                    <option value={RecordType.SERVICOS}>Serviços</option>
+                    <option value={RecordType.PAGAMENTOS}>Pagamentos</option>
+                 </select>
+              </div>
+            </div>
+            <RecordsTable 
+              records={filteredRecords} 
+              onEdit={(rec) => { setEditingRecord(rec); setIsFormOpen(true); }} 
+              onDelete={deleteRecord} 
+            />
+          </section>
         </div>
       </main>
 
-      {/* Form Modal */}
       {isFormOpen && (
         <RecordForm 
           initialData={editingRecord}
@@ -336,20 +282,10 @@ const App: React.FC = () => {
           cities={uniqueCities}
           executors={uniqueExecutors}
           onSave={saveRecord}
-          onCancel={() => {
-            setIsFormOpen(false);
-            setEditingRecord(undefined);
-          }}
+          onCancel={() => { setIsFormOpen(false); setEditingRecord(undefined); }}
         />
       )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
     </div>
   );
 };
