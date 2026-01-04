@@ -1,9 +1,17 @@
 
 import { ServiceRecord, DatabaseConfig } from "../types";
 
-// Prioriza as variáveis vindo do ambiente (Vercel/Vite/Process)
-export const NEON_PROJECT_ID = process.env.NEON_PROJECT_ID || 'org-snowy-hall-43489951';
-export const NEON_API_KEY = process.env.NEON_API_KEY || '';
+// Função utilitária para acesso seguro ao env
+const getEnv = (key: string): string => {
+  try {
+    return (typeof process !== 'undefined' && process.env) ? (process.env[key] || '') : '';
+  } catch {
+    return '';
+  }
+};
+
+export const NEON_PROJECT_ID = getEnv('NEON_PROJECT_ID') || 'org-snowy-hall-43489951';
+export const NEON_API_KEY = getEnv('NEON_API_KEY');
 
 export const DEFAULT_CONFIG: DatabaseConfig = {
   projectId: NEON_PROJECT_ID,
@@ -33,7 +41,12 @@ CREATE INDEX IF NOT EXISTS idx_records_client ON claudemir_records(client);
 export const neonDB = {
   getConfig(): DatabaseConfig {
     const saved = localStorage.getItem('neon_config');
-    return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
+    if (!saved) return DEFAULT_CONFIG;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return DEFAULT_CONFIG;
+    }
   },
 
   saveConfig(config: DatabaseConfig) {
@@ -44,8 +57,7 @@ export const neonDB = {
     const config = this.getConfig();
     console.log(`[Neon DB] Fetching from project: ${config.projectId}`);
     
-    // Simulação de latência de rede para refletir comportamento real
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await new Promise(resolve => setTimeout(resolve, 300));
     const remoteData = localStorage.getItem('neon_db_sim_data');
     return remoteData ? JSON.parse(remoteData) : [];
   },

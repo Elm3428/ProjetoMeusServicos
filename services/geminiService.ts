@@ -3,10 +3,14 @@ import { GoogleGenAI } from "@google/genai";
 import { ServiceRecord } from "../types";
 
 export const getAIInsights = async (records: ServiceRecord[]): Promise<string> => {
-  // Inicializa a IA usando a variável de ambiente conforme as diretrizes
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
   
-  // Prepara um resumo otimizado para análise
+  if (!apiKey) {
+    return "Erro: Chave de API do Gemini não configurada nas variáveis de ambiente.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  
   const summary = records.slice(0, 60).map(r => ({
     tipo: r.type,
     valor: r.value,
@@ -26,11 +30,11 @@ export const getAIInsights = async (records: ServiceRecord[]): Promise<string> =
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', // Upgrade para o modelo Pro para melhor raciocínio financeiro
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         systemInstruction: "Você é um consultor financeiro sênior especializado em logística e manutenção industrial. Sua linguagem deve ser técnica, porém clara e direta para um dono de pequeno negócio.",
-        temperature: 0.5, // Menor temperatura para respostas mais factuais
+        temperature: 0.5,
         thinkingConfig: { thinkingBudget: 4000 }
       },
     });
@@ -38,9 +42,6 @@ export const getAIInsights = async (records: ServiceRecord[]): Promise<string> =
     return response.text || "Os dados foram analisados, mas nenhum insight relevante foi gerado no momento.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    if (error instanceof Error && error.message.includes("API_KEY")) {
-      return "Erro: Chave de API não configurada corretamente no ambiente de deploy.";
-    }
     return "Erro ao conectar com a inteligência artificial. Verifique sua conexão e configurações de ambiente.";
   }
 };
