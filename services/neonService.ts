@@ -1,14 +1,13 @@
 
 import { ServiceRecord, DatabaseConfig } from "../types";
 
-// Prioriza o ID do projeto vindo do ambiente, mantendo o fallback para o original
-export const NEON_PROJECT_ID = (typeof process !== 'undefined' && process.env.NEON_PROJECT_ID) 
-  ? process.env.NEON_PROJECT_ID 
-  : 'org-snowy-hall-43489951';
+// Prioriza as variáveis vindo do ambiente (Vercel/Vite/Process)
+export const NEON_PROJECT_ID = process.env.NEON_PROJECT_ID || 'org-snowy-hall-43489951';
+export const NEON_API_KEY = process.env.NEON_API_KEY || '';
 
 export const DEFAULT_CONFIG: DatabaseConfig = {
   projectId: NEON_PROJECT_ID,
-  apiKey: '', 
+  apiKey: NEON_API_KEY, 
   tableName: 'claudemir_records',
   isInitialized: true
 };
@@ -45,6 +44,7 @@ export const neonDB = {
     const config = this.getConfig();
     console.log(`[Neon DB] Fetching from project: ${config.projectId}`);
     
+    // Simulação de latência de rede para refletir comportamento real
     await new Promise(resolve => setTimeout(resolve, 600));
     const remoteData = localStorage.getItem('neon_db_sim_data');
     return remoteData ? JSON.parse(remoteData) : [];
