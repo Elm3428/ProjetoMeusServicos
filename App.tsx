@@ -10,19 +10,21 @@ import Dashboard from './components/Dashboard';
 import RecordsTable from './components/RecordsTable';
 import RecordForm from './components/RecordForm';
 import { neonDB } from './services/neonService';
+import * as XLSX from 'xlsx';
 import { 
   Plus, 
   LogOut, 
   LayoutDashboard, 
-  List, 
   Download, 
   Menu,
   Database,
   Loader2,
   CheckCircle2,
-  Search
+  Search,
+  FileSpreadsheet
 } from 'lucide-react';
-import { parseISO } from 'date-fns';
+import { parseISO, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const App: React.FC = () => {
   const [records, setRecords] = useState<ServiceRecord[]>([]);
@@ -119,13 +121,39 @@ const App: React.FC = () => {
     }
   };
 
-  const handleExport = () => {
+  const handleExportJSON = () => {
     const dataStr = JSON.stringify(records, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', `gestor_${new Date().toISOString().split('T')[0]}.json`);
     linkElement.click();
+    showToast("JSON Exportado!");
+  };
+
+  const handleExportExcel = () => {
+    // Formata os dados para o Excel
+    const dataToExport = records.map(r => ({
+      'Data': format(parseISO(r.date), 'dd/MM/yyyy', { locale: ptBR }),
+      'Dia': r.weekDay,
+      'Cliente': r.client,
+      'Cidade': r.city,
+      'Descrição': r.description,
+      'Tipo': r.type,
+      'Valor (R$)': r.value,
+      'Executado por': r.executedBy
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+
+    // Ajusta largura das colunas automaticamente (aproximado)
+    const maxWidths = [15, 15, 20, 15, 40, 15, 15, 20];
+    worksheet['!cols'] = maxWidths.map(w => ({ wch: w }));
+
+    XLSX.writeFile(workbook, `Gestor_Claudemir_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+    showToast("Excel Exportado!");
   };
 
   // Improved filtering + SORTING by date DESCENDING (most recent first)
@@ -213,8 +241,11 @@ const App: React.FC = () => {
             <button className="p-3 rounded-xl bg-slate-800 text-emerald-500 shadow-lg" title="Dashboard">
               <LayoutDashboard size={18} />
             </button>
-            <button className="p-3 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition-all" title="Exportar" onClick={handleExport}>
+            <button className="p-3 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition-all" title="Exportar JSON" onClick={handleExportJSON}>
               <Download size={18} />
+            </button>
+            <button className="p-3 rounded-xl text-slate-500 hover:text-emerald-400 hover:bg-slate-800 transition-all" title="Exportar Excel" onClick={handleExportExcel}>
+              <FileSpreadsheet size={18} />
             </button>
           </nav>
           <button onClick={handleLogout} className="p-3 rounded-xl text-slate-600 hover:text-rose-400" title="Sair">
@@ -239,9 +270,20 @@ const App: React.FC = () => {
               />
             </div>
           </div>
-          <button onClick={() => { setEditingRecord(undefined); setIsFormOpen(true); }} className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg flex items-center gap-2 hover:bg-emerald-500 shadow-lg shadow-emerald-950/20 text-[10px] font-black uppercase tracking-[0.1em]">
-            <Plus size={14} /> Novo Serviço
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleExportExcel} 
+              className="hidden sm:flex bg-slate-800 text-emerald-400 border border-slate-700 px-4 py-1.5 rounded-lg items-center gap-2 hover:bg-slate-700 transition-all text-[10px] font-black uppercase tracking-[0.1em]"
+            >
+              <FileSpreadsheet size={14} /> Planilha
+            </button>
+            <button 
+              onClick={() => { setEditingRecord(undefined); setIsFormOpen(true); }} 
+              className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg flex items-center gap-2 hover:bg-emerald-500 shadow-lg shadow-emerald-950/20 text-[10px] font-black uppercase tracking-[0.1em]"
+            >
+              <Plus size={14} /> Novo Serviço
+            </button>
+          </div>
         </header>
 
         <div className="p-6 space-y-8 max-w-7xl mx-auto">
