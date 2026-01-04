@@ -2,11 +2,11 @@
 import { ServiceRecord, DatabaseConfig } from "../types";
 
 // Fixed: Exporting NEON_PROJECT_ID to resolve the import error in App.tsx
-export const NEON_PROJECT_ID = 'org-snowy-hall-43489951';
+export const NEON_PROJECT_ID = import.meta.env.VITE_NEON_PROJECT_ID || 'org-snowy-hall-43489951';
 
 export const DEFAULT_CONFIG: DatabaseConfig = {
   projectId: NEON_PROJECT_ID,
-  apiKey: '', // A chave fornecida pelo usuário
+  apiKey: import.meta.env.VITE_NEON_API_KEY || '', // A chave fornecida pelo usuário ou via env
   tableName: 'claudemir_records',
   isInitialized: true
 };
